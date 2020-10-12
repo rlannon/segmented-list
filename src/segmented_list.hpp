@@ -10,7 +10,7 @@ Copyright 2020 Riley Lannon
 #include <memory>
 #include <type_traits>
 #include <exception>
-#include <iostream>
+#include <iterator>
 
 #include "block.hpp"
 
@@ -35,6 +35,7 @@ class segmented_list
 
     size_t _capacity;
     size_t _size;
+    size_t _num_blocks;
 
     void _alloc_block()
     {
@@ -62,30 +63,48 @@ class segmented_list
             auto allocated = std::allocator_traits<Allocator>::allocate(_allocator, 1);
             std::allocator_traits<Allocator>::construct(_allocator, allocated, _tail);
 
-            if (_head)
+            if (_num_blocks == 0)
             {
-                // update _tail to point to this block; update _tail
-                _tail->_next = allocated;
-                _tail = allocated;
+                _head = allocated;
+            }
+            else if (_num_blocks == 1)
+            {
+                _head->_next = allocated;
             }
             else
             {
-                _head = allocated;
-                _tail = allocated;
+                _tail->_next = allocated;
             }
+
+            _tail = allocated;
         }
 
         _capacity += _block<T>::block_size();
+        _num_blocks++;
     }
 public:
-    size_t size()
+    // define other class traits
+    using value_type = T;
+    using reference = T & ;
+    using pointer = T * ;
+    using const_reference = const T & ;
+    using const_pointer = const T * ;
+    using size_type = size_t;
+    using allocator_type = Allocator;
+
+    size_t size() const noexcept
     {
         return _size;
     }
 
-    size_t capacity()
+    size_t capacity() const noexcept
     {
         return _capacity;
+    }
+
+    bool empty() const noexcept
+    {
+        return _size == 0;
     }
 
     template <bool is_const = false>
@@ -93,8 +112,15 @@ public:
     {
         friend class segmented_list;    // ensure the parent class is a friend
 
-        _block<typename list_iterator::value_type>* _block_pointer;  // pointer to the block we are in
+        _block<value_type>* _block_pointer;  // pointer to the block we are in
         size_t _elem_index; // index within the block
+
+        list_iterator(_block<value_type>* p, size_t idx)
+            : _block_pointer(p)
+            , _elem_index(idx)
+        {
+            // private constructor
+        }
     public:
         using value_type = typename std::conditional<is_const, const T, T>::type;
         using pointer = value_type * ;
@@ -115,9 +141,12 @@ public:
             return _block_pointer != right._block_pointer || _elem_index != right._elem_index;
         }
 
-        reference operator*()
+        list_iterator::reference operator*()
         {
-            if (_block_pointer && (_elem_index < (_block_pointer->capacity() - 1) ) )
+            if (
+                (_block_pointer != nullptr) && 
+                (_elem_index < (_block_pointer->capacity()) ) 
+            )
             {
                 return _block_pointer->_arr[_elem_index];
             }
@@ -125,12 +154,11 @@ public:
             {
                 throw std::out_of_range("segmented_list iterator");
             }
-            
         }
 
-        pointer operator->()
+        list_iterator::pointer operator->()
         {
-            if (_block_pointer && (_elem_index < (_block_pointer->capacity() - 1) ) )
+            if (_block_pointer && (_elem_index < (_block_pointer->capacity()) ) )
             {
                 return &_block_pointer->_arr[_elem_index];
             }
@@ -148,10 +176,17 @@ public:
                 _elem_index++;
 
                 // check to see if we need to move to the next block
-                if (_elem_index == _block<T>::block_size())
+                if (_elem_index == _block<value_type>::block_size())
                 {
                     _elem_index = 0;
                     _block_pointer = _block_pointer->_next;
+                }
+
+                // check to see if we are now past the end
+                if (_block_pointer && _elem_index >= _block_pointer->_size)
+                {
+                    _block_pointer = nullptr;
+                    _elem_index = 0;
                 }
             }
             else
@@ -171,19 +206,24 @@ public:
                 _elem_index++;
 
                 // check to see if we need to move onto the next block
-                if (_elem_index == _block<T>::block_size())
+                if (_elem_index == _block<value_type>::block_size())
                 {
                     _elem_index = 0;
                     _block_pointer = _block_pointer->_next;
                 }
-                
+
+                // check to see if we are now past the end
+                if (_block_pointer && _elem_index >= _block_pointer->_size)
+                {
+                    _block_pointer = nullptr;
+                    _elem_index = 0;
+                }
             }
             else
             {
                 throw std::out_of_range("segmented_list iterator");
             }
             
-
             return li;
         }
 
@@ -193,8 +233,11 @@ public:
             {
                 if (_elem_index == 0)
                 {
-                    _elem_index = _block<T>::block_size() - 1;
+                    _elem_index = _block<value_type>::block_size() - 1;
                     _block_pointer = _block_pointer->_previous;
+
+                    if (_block_pointer == nullptr)
+                        _elem_index = 0;
                 }
                 else
                 {
@@ -218,8 +261,11 @@ public:
             {
                 if (_elem_index == 0)
                 {
-                    _elem_index = _block<T>::block_size() - 1;
+                    _elem_index = _block<value_type>::block_size() - 1;
                     _block_pointer = _block_pointer->_previous;
+
+                    if (_block_pointer == nullptr)
+                        _elem_index = 0;
                 }
                 else
                 {
@@ -246,12 +292,14 @@ public:
 
         template<bool _is_const = is_const,
             typename std::enable_if<_is_const, int>::value = 1>
-        list_iterator& operator=(const list_iterator<false>&& it)
+        list_iterator& operator=(list_iterator<false>&& it)
         {
             // converting move assignment operator
             _block_pointer = it._block_pointer;
             _elem_index = it._elem_index;
-            it = nullptr;
+            
+            it._block_pointer = nullptr;
+            it._elem_index = 0;
         }
 
         list_iterator& operator=(const list_iterator& it)
@@ -261,12 +309,14 @@ public:
             _elem_index = it._elem_index;
         }
 
-        list_iterator& operator=(const list_iterator&& it)
+        list_iterator& operator=(list_iterator&& it)
         {
             // default move assignment operator
             _block_pointer = it._block_pointer;
             _elem_index = it._elem_index;
-            it = nullptr;
+            
+            it._block_pointer = nullptr;
+            it._elem_index = 0;
         }
 
         // Constructors
@@ -286,12 +336,13 @@ public:
 
         template<bool _is_const = is_const,
             typename std::enable_if<_is_const, int>::value = 1>
-        list_iterator(const list_iterator<false>&& it)
+        list_iterator(list_iterator<false>&& it)
             : _block_pointer(it._block_pointer)
             , _elem_index(it._elem_index)
         {
             // converting move constructor
-            it = nullptr;
+            it._block_pointer = nullptr;
+            it._elem_index = 0;
         }
 
         list_iterator(const list_iterator& it)
@@ -301,12 +352,13 @@ public:
             // default copy constructor
         }
 
-        list_iterator(const list_iterator&& it)
+        list_iterator(list_iterator&& it)
             : _block_pointer(it._block_pointer)
             , _elem_index(it._elem_index)
         {
             // default move constructor
-            it = nullptr;
+            it._block_pointer = nullptr;
+            it._elem_index = 0;
         }
     };
 
@@ -316,22 +368,32 @@ public:
     using reverse_iterator = std::reverse_iterator<list_iterator<false> >;
     using const_reverse_iterator = std::reverse_iterator<list_iterator<true> >;
 
-    // define other class traits
-    using value_type = T;
-    using reference = T & ;
-    using pointer = T * ;
-    using const_reference = const T & ;
-    using const_pointer = const T * ;
-    using size_type = size_t;
-
     iterator begin()
     {
-        // todo
+        if (_size == 0)
+        {
+            // todo: how to handle before-the-beginning element?
+            return iterator(nullptr, 0);
+        }
+        else
+        {
+            // return an iterator to the first element
+            return iterator(_head, 0);
+        }
+        
     }
 
     const_iterator cbegin()
     {
-        // todo
+        if (_size == 0)
+        {
+            // todo: how to handle?
+            return const_iterator(nullptr, 0);
+        }
+        else
+        {
+            return const_iterator(_head, 0);
+        }
     }
 
     reverse_iterator rbegin()
@@ -346,12 +408,13 @@ public:
 
     iterator end()
     {
-        // todo
+        // todo: how to handle past-the-end?
+        return iterator(nullptr, 0);
     }
 
     const_iterator cend()
     {
-        // todo
+        return const_iterator(nullptr, 0);
     }
 
     reverse_iterator rend()
@@ -487,6 +550,7 @@ public:
                 // update the tail node and the capacity
                 _tail = new_tail;
                 _capacity -= _block<T>::block_size();
+                _num_blocks--;
             }
         }
     }
@@ -497,6 +561,7 @@ public:
         , _reserved(nullptr)
         , _size(0)
         , _capacity(0)
+        , _num_blocks(0)
     {
         // default constructor
     }
