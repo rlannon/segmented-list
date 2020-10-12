@@ -102,6 +102,11 @@ public:
         return _capacity;
     }
 
+    size_t max_size() const noexcept
+    {
+        return std::allocator_traits<Allocator>::max_size(_allocator);
+    }
+
     bool empty() const noexcept
     {
         return _size == 0;
@@ -370,6 +375,30 @@ public:
     using reverse_iterator = std::reverse_iterator<list_iterator<false> >;
     using const_reverse_iterator = std::reverse_iterator<list_iterator<true> >;
 
+    reference front()
+    {
+        if (_size == 0)
+        {
+            throw std::out_of_range("segmented_list");
+        }
+        else
+        {
+            return _head->_arr[0];
+        }
+    }
+
+    reference back()
+    {
+        if (_size == 0)
+        {
+            throw std::out_of_range("segmented list");
+        }
+        else
+        {
+            return _tail->_arr[_tail->size() - 1];
+        }
+    }
+
     iterator begin()
     {
         if (_size == 0)
@@ -559,20 +588,15 @@ public:
         }
     }
 
-    segmented_list() noexcept
-        : _head(nullptr)
-        , _tail(nullptr)
-        , _reserved(nullptr)
-        , _size(0)
-        , _capacity(0)
-        , _num_blocks(0)
+    void clear()
     {
-        // default constructor
-    }
+        /*
 
-    ~segmented_list()
-    {
-        // deallocate each block
+        clear
+        Erase all blocks in the container, leaving it with a size and capacity of 0
+
+        */
+
         auto current = _head;
         while (current)
         {
@@ -586,5 +610,39 @@ public:
             // update the current block
             current = next;
         }
+
+        // if there was a block on reserve, destroy and deallocate that too
+        if (_reserved)
+        {
+            std::allocator_traits<Allocator>::destroy(_allocator, _reserved);
+            std::allocator_traits<Allocator>::deallocate(_allocator, _reserved, 1);
+
+            _reserved = nullptr;
+        }
+
+        // update our members
+        _capacity = 0;
+        _size = 0;
+        _num_blocks = 0;
+
+        _head = nullptr;
+        _tail = nullptr;
+    }
+
+    segmented_list() noexcept
+        : _head(nullptr)
+        , _tail(nullptr)
+        , _reserved(nullptr)
+        , _size(0)
+        , _capacity(0)
+        , _num_blocks(0)
+    {
+        // default constructor
+    }
+
+    ~segmented_list()
+    {
+        // deallocate each block by calling 'clear'
+        clear();
     }
 };
