@@ -31,7 +31,7 @@ class _block
     _block* _previous;
     _block* _next;
 
-    size_t _capacity;
+    const size_t _capacity;
     size_t _size;
 public:
     using value_type = T;
@@ -61,7 +61,7 @@ public:
         return _size == 0;
     }
 
-    void push_back(const value_type val)
+    void push_back(const T& val)
     {
         /*
 
@@ -79,11 +79,31 @@ public:
         else
         {
             throw std::out_of_range("_block");
-        }
-        
+        }   
     }
 
-    _block(const _block<T, N>* tail)
+    void pop_back()
+    {
+        /*
+
+        pop_back
+        Removes the last element from the array
+
+        */
+
+        if (_size == 0)
+        {
+            throw std::out_of_range("_block");
+        }
+        else
+        {
+            // do not call the destructor explicitly, as the std::array destructor will do that
+            // this means the element is left in a valid but indeterminate state
+            _size -= 1;
+        }
+    }
+
+    _block(_block<T, N>* tail)
         : _previous(tail)
         , _next(nullptr)
         , _capacity(N)
