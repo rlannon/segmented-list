@@ -236,6 +236,7 @@ public:
                     _elem_index = _block<value_type>::block_size() - 1;
                     _block_pointer = _block_pointer->_previous;
 
+                    // if there is no previous block, ensure elem_index is set to 0
                     if (_block_pointer == nullptr)
                         _elem_index = 0;
                 }
@@ -264,6 +265,7 @@ public:
                     _elem_index = _block<value_type>::block_size() - 1;
                     _block_pointer = _block_pointer->_previous;
 
+                    // if there is no previous block, ensure elem_index is set to 0
                     if (_block_pointer == nullptr)
                         _elem_index = 0;
                 }
@@ -398,12 +400,12 @@ public:
 
     reverse_iterator rbegin()
     {
-        // todo
+        return reverse_iterator(_tail, _tail->size() - 1);
     }
 
     const_reverse_iterator crbegin()
     {
-        // todo
+        return const_reverse_iterator(_tail, _tail->size() - 1);
     }
 
     iterator end()
@@ -419,15 +421,15 @@ public:
 
     reverse_iterator rend()
     {
-        // todo
+        return reverse_iterator(nullptr, 0);
     }
 
     const_reverse_iterator crend()
     {
-        // todo
+        return const_reverse_iterator(nullptr, 0);
     }
     
-    value_type at(size_type idx)
+    reference at(size_type n)
     {
         /*
 
@@ -435,7 +437,7 @@ public:
         Returns the element at the specified position
 
         The algorithm is as follows:
-            * Divide the index (idx) by the capacity of the block
+            * Divide the index (n) by the capacity of the block
             * This will indicate the block number we need
             * The remainder of that division will be its index within that block
             * Iterate through blocks until we find the proper one
@@ -443,13 +445,11 @@ public:
 
         */
 
-        value_type v;
-
-        if (idx < _size)
+        if (n < _size)
         {
             // get the block size and index number
-            auto block_number = idx / _block<T>::capacity();
-            auto index_number = idx % _block<T>::capacity();
+            auto block_number = n / _block<value_type>::block_size();
+            auto index_number = n % _block<value_type>::block_size();
             auto current_node = _head;
 
             // iterate through the linked list until we get to the proper block
@@ -467,7 +467,7 @@ public:
 
             if (index_number < current_node->_size)
             {
-                v = current_node->_arr[index_number];
+                return current_node->_arr[index_number];
             }
             else
             {
@@ -478,9 +478,13 @@ public:
         else
         {
             throw std::out_of_range("segmented_list");
-        }
+        } 
+    }
 
-        return v;   
+    reference operator[](size_t n)
+    {
+        // an alias for 'at'
+        return this->at(n);
     }
 
     void push_back(const T& val)
