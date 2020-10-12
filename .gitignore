@@ -1,0 +1,10 @@
+# ignore the main file (for build testing only)
+src/main.cpp
+
+# ignore all output files
+*.o
+*.out
+*.exe
+
+# ignore vscode settings
+.vscode/*
