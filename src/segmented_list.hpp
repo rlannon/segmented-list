@@ -27,9 +27,10 @@ class segmented_list
 
     */
 
+    // like a linked list, track head and tail nodes
     _block<T>* _head;
     _block<T>* _tail;
-    _block<T>* _reserved;
+    _block<T>* _reserved;   // keep one block reserved upon a deallocation
 
     Allocator _allocator;
 
@@ -479,30 +480,70 @@ public:
             // get the block size and index number
             auto block_number = n / _block<value_type>::block_size();
             auto index_number = n % _block<value_type>::block_size();
-            auto current_node = _head;
+            _block<T>* containing_node = nullptr;   // the _block containing the array we want to index
 
-            // iterate through the linked list until we get to the proper block
-            for (size_t i = 0; i < block_number; i++)
+            /*
+
+            Get the proper node
+
+            We can optimize if it's close to the head or tail of the list
+            We will also iterate from the front if it's toward the front, or the back if it's toward the back 
+
+            */
+
+            if (block_number == 0)
             {
-                if (current_node)
+                containing_node = _head;
+            }
+            else if (block_number == _num_blocks - 1)
+            {
+                containing_node = _tail;
+            }
+            else if (block_number <= _num_blocks / 2)
+            {
+                // iterate through the linked list until we get to the proper block            
+                auto current_node = _head;
+                for (size_t i = 0; i < block_number; i++)
                 {
-                    current_node = current_node->_next;
+                    if (current_node)
+                    {
+                        current_node = current_node->_next;
+                    }
+                    else
+                    {
+                        throw std::out_of_range("segmented_list");
+                    }
                 }
-                else
+                containing_node = current_node;
+            }
+            else
+            {
+                // iterate backwards
+                auto current_node = _tail;
+                size_t num_times = _num_blocks - block_number - 1;
+                for (size_t i = 0; i < num_times; i++)
                 {
-                    throw std::out_of_range("segmented_list");
+                    if (current_node)
+                    {
+                        current_node = current_node->_previous;
+                    }
+                    else
+                    {
+                        throw std::out_of_range("segmented_list");
+                    }
                 }
+                containing_node = current_node;
             }
 
-            if (index_number < current_node->_size)
+            // now, index the block's array to get the element
+            if (index_number < containing_node->_size)
             {
-                return current_node->_arr[index_number];
+                return containing_node->_arr[index_number];
             }
             else
             {
                 throw std::out_of_range("segmented_list");
             }
-            
         }
         else
         {
@@ -588,6 +629,34 @@ public:
         }
     }
 
+    void insert(const_iterator& position, const T& val)
+    {
+        /*
+
+        insert
+        Inserts a single element into the list at 'position'
+        
+        This will move all subsequent elements back
+
+        */
+
+        // todo
+    }
+
+    void erase(const_iterator& position)
+    {
+        /*
+
+        erase
+        Removes a single element (at 'position') from the list
+
+        This will move all subsequent elements up one position
+
+        */
+
+        // todo
+    }
+
     void clear()
     {
         /*
@@ -627,6 +696,35 @@ public:
 
         _head = nullptr;
         _tail = nullptr;
+    }
+
+    // constructors
+
+    segmented_list(const segmented_list& other)
+        : _head(other._head)
+        , _tail(other._tail)
+        , _num_blocks(other._num_blocks)
+        , _size(other._size)
+        , _capacity(other._capacity)
+        , _allocator(other._allocator)
+    {
+        // copy constructor
+    }
+    segmented_list(const segmented_list&& other)
+        : _head(other._head)
+        , _tail(other._tail)
+        , _num_blocks(other._num_blocks)
+        , _size(other._size)
+        , _capacity(other._capacity)
+        , _allocator(other._allocator)
+    {
+        // move constructor
+        other._head = nullptr;
+        other._tail = nullptr;
+        other._num_blocks = 0;
+        other._size = 0;
+        other._capacity = 0;
+        other._allocator = nullptr;
     }
 
     segmented_list() noexcept
