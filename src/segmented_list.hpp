@@ -11,6 +11,7 @@ Copyright 2020 Riley Lannon
 #include <type_traits>
 #include <exception>
 #include <iterator>
+#include <initializer_list>
 
 #include "block.hpp"
 
@@ -111,6 +112,11 @@ public:
     bool empty() const noexcept
     {
         return _size == 0;
+    }
+
+    Allocator get_allocator() const noexcept
+    {
+        return _allocator;
     }
 
     template <bool is_const = false>
@@ -640,7 +646,31 @@ public:
 
         */
 
-        // todo
+        // increment the size and allocate another block if needed
+        _size++;
+        if (_size >= _capacity)
+        {
+            _alloc_block();
+        }
+
+        // utilize reverse iterators to move elements back
+        reverse_iterator new_position = rbegin();
+        reverse_iterator old_position = ++new_position;
+
+        // continue moving back elements until the element after 'old_position'
+        // (i.e., 'new_position') is the position to which we are inserting
+        while (old_position.base() != position)
+        {
+            // move the element back
+            *new_position = *old_position;
+
+            // update the iterators
+            old_position++;
+            new_position++;
+        }
+
+        // update the element at 'position'
+        *position = val;
     }
 
     void erase(const_iterator& position)
@@ -654,7 +684,42 @@ public:
 
         */
 
-        // todo
+        iterator cur = position;
+        iterator next = ++cur;  // set 'next' to point to the element after cur via operator++()
+        while (next != this->end())
+        {
+            *cur = *next;
+            cur++;
+            next++;
+        }
+
+        // update the size (and capacity if necessary)
+        _size--;
+        if (_tail->empty())
+        {
+            if (_reserved)
+            {
+                // update the tail node
+                _reserved = _tail;
+                _tail = _tail->_previous;
+
+                // clear size and chain data from the reserved block
+                _reserved->_size = 0;
+                _reserved->_previous = nullptr;
+                _reserved->_next = nullptr;
+            }
+            else
+            {
+                // mark the new end of the list
+                auto to_delete = _tail;
+                _tail = _tail->_previous;
+                _tail->_next = nullptr;
+
+                // destroy and deallocate the old _tail node
+                std::allocator_traits<Allocator>::destroy(_allocator, to_delete);
+                std::allocator_traits<Allocator>::deallocate(_allocator, to_delete, 1);
+            }
+        }
     }
 
     void clear()
@@ -699,6 +764,45 @@ public:
     }
 
     // constructors
+    // todo: follow C++20 standards
+
+    explicit segmented_list(const Allocator& alloc) noexcept
+        : segmented_list()
+        , _allocator(alloc)
+    {
+    }
+
+    segmented_list(size_t count, const T& value, const Allocator& alloc = Allocator())
+        : segmented_list()
+        , _allocator(alloc)
+    {
+        // initialize with 'count' elements all equal to 'value'
+
+        // fill the space with values; the container will automatically be resized when needed
+        for (size_t i = 0; i < count; i++)
+        {
+            this->push_back(value);
+        }
+    }
+
+    explicit segmented_list(size_t count, const Allocator& alloc = Allocator())
+        : _allocator(alloc)
+    {
+        // initial size of 'count' with default-inserted T
+        for (size_t i = 0; i < count; i++)
+        {
+            this->push_back( T{} );
+        }
+    }
+
+    segmented_list(const initializer_list<T>& il)
+    {
+        // initialization with initializer list
+        for (auto it = il.begin(); it != il.end(); it++)
+        {
+            this->push_back(*it);
+        }
+    }
 
     segmented_list(const segmented_list& other)
         : _head(other._head)
@@ -710,7 +814,8 @@ public:
     {
         // copy constructor
     }
-    segmented_list(const segmented_list&& other)
+
+    segmented_list(segmented_list&& other) noexcept
         : _head(other._head)
         , _tail(other._tail)
         , _num_blocks(other._num_blocks)
@@ -719,6 +824,26 @@ public:
         , _allocator(other._allocator)
     {
         // move constructor
+        other._head = nullptr;
+        other._tail = nullptr;
+        other._num_blocks = 0;
+        other._size = 0;
+        other._capacity = 0;
+        other._allocator = nullptr;
+    }
+
+    segmented_list(segmented_list&& other, const Allocator& alloc)
+        : _head(other._head)
+        , _tail(other._tail)
+        , _num_blocks(other._num_blocks)
+        , _size(other._size)
+        , _capacity(other._capacity)
+        , _allocator(alloc)
+    {
+        // allocator-extended move constructor
+
+        // todo: case where alloc != other.get_allocator()
+
         other._head = nullptr;
         other._tail = nullptr;
         other._num_blocks = 0;
