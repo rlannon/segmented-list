@@ -134,12 +134,15 @@ public:
             // private constructor
         }
     public:
-        using value_type = typename std::conditional<is_const, const T, T>::type;
-        using pointer = value_type * ;
-        using reference = value_type & ;
+        using value_type = T;
+        using pointer = 
+            typename std::conditional_t<is_const, const value_type *, value_type * >;
+        using reference = 
+            typename std::conditional_t<is_const, const value_type &, value_type & >;
         using const_pointer = const T * ;
         using const_reference = const T & ;
         using iterator_category = std::bidirectional_iterator_tag;
+        using difference_type = std::ptrdiff_t;
 
         // Operator overloads
 
@@ -158,8 +161,21 @@ public:
             if (
                 (_block_pointer != nullptr) && 
                 (_elem_index < (_block_pointer->capacity()) ) 
-            )
+            ) {
+                return _block_pointer->_arr[_elem_index];
+            }
+            else
             {
+                throw std::out_of_range("segmented_list iterator");
+            }
+        }
+
+        list_iterator::const_reference operator*() const
+        {
+            if (
+                (_block_pointer != nullptr) && 
+                (_elem_index < (_block_pointer->capacity()) ) 
+            ) {
                 return _block_pointer->_arr[_elem_index];
             }
             else
@@ -178,7 +194,18 @@ public:
             {
                 throw std::out_of_range("segmented_list iterator");
             }
-            
+        }
+
+        list_iterator::const_pointer operator->() const
+        {
+            if (_block_pointer && (_elem_index < (_block_pointer->capacity()) ) )
+            {
+                return &_block_pointer->_arr[_elem_index];
+            }
+            else
+            {
+                throw std::out_of_range("segmented_list iterator");
+            }
         }
 
         list_iterator& operator++()
@@ -339,6 +366,22 @@ public:
             : _block_pointer(nullptr)
             , _elem_index(0) {}
 
+        list_iterator(const list_iterator& it)
+            : _block_pointer(it._block_pointer)
+            , _elem_index(it._elem_index)
+        {
+            // default copy constructor
+        }
+
+        list_iterator(list_iterator&& it)
+            : _block_pointer(it._block_pointer)
+            , _elem_index(it._elem_index)
+        {
+            // default move constructor
+            it._block_pointer = nullptr;
+            it._elem_index = 0;
+        }
+
         template<bool _is_const = is_const,
             typename std::enable_if<_is_const, int>::value = 1>
         list_iterator(const list_iterator<false>& it)
@@ -358,29 +401,13 @@ public:
             it._block_pointer = nullptr;
             it._elem_index = 0;
         }
-
-        list_iterator(const list_iterator& it)
-            : _block_pointer(it._block_pointer)
-            , _elem_index(it._elem_index)
-        {
-            // default copy constructor
-        }
-
-        list_iterator(list_iterator&& it)
-            : _block_pointer(it._block_pointer)
-            , _elem_index(it._elem_index)
-        {
-            // default move constructor
-            it._block_pointer = nullptr;
-            it._elem_index = 0;
-        }
     };
 
     // define our iterators
     using iterator = list_iterator<false>;
     using const_iterator = list_iterator<true>;
-    using reverse_iterator = std::reverse_iterator<list_iterator<false> >;
-    using const_reverse_iterator = std::reverse_iterator<list_iterator<true> >;
+    using reverse_iterator = std::reverse_iterator<iterator>;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
     reference front()
     {
@@ -436,12 +463,16 @@ public:
 
     reverse_iterator rbegin()
     {
-        return reverse_iterator(_tail, _tail->size() - 1);
+        return reverse_iterator(
+            iterator(_tail, _tail->size() - 1)
+        );
     }
 
     const_reverse_iterator crbegin()
     {
-        return const_reverse_iterator(_tail, _tail->size() - 1);
+        return const_reverse_iterator(
+            iterator(_tail, _tail->size() - 1)
+        );
     }
 
     iterator end()
@@ -465,6 +496,7 @@ public:
         return const_reverse_iterator(nullptr, 0);
     }
     
+    [[nodiscard]]
     reference at(size_type n)
     {
         /*
@@ -557,6 +589,7 @@ public:
         } 
     }
 
+    [[nodiscard]]
     reference operator[](size_t n)
     {
         // an alias for 'at'
@@ -635,7 +668,7 @@ public:
         }
     }
 
-    void insert(const_iterator& position, const T& val)
+    void insert(const_iterator position, const T& val)
     {
         /*
 
@@ -673,7 +706,7 @@ public:
         *position = val;
     }
 
-    void erase(const_iterator& position)
+    void erase(const_iterator position)
     {
         /*
 
@@ -768,15 +801,15 @@ public:
 
     explicit segmented_list(const Allocator& alloc) noexcept
         : segmented_list()
-        , _allocator(alloc)
     {
+        _allocator = alloc;
     }
 
     segmented_list(size_t count, const T& value, const Allocator& alloc = Allocator())
         : segmented_list()
-        , _allocator(alloc)
     {
         // initialize with 'count' elements all equal to 'value'
+        _allocator = alloc;
 
         // fill the space with values; the container will automatically be resized when needed
         for (size_t i = 0; i < count; i++)
@@ -795,7 +828,7 @@ public:
         }
     }
 
-    segmented_list(const initializer_list<T>& il)
+    segmented_list(const std::initializer_list<T>& il)
     {
         // initialization with initializer list
         for (auto it = il.begin(); it != il.end(); it++)
