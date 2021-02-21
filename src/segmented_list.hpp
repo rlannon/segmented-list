@@ -220,6 +220,8 @@ namespace segmented_list
             _capacity += list_block<T>::block_size();
             _num_blocks++;
         }
+    
+        
     public:
         // define our iterator states (valid/invalid)
         enum iter_state { iter_valid = 0, before_begin = 1, past_end = 2 };
@@ -554,7 +556,104 @@ namespace segmented_list
         using const_pointer = const T * ;
         using size_type = size_t;
         using allocator_type = Allocator;
+    
+    private:
+        constexpr reference _at(size_type pos) const
+        {
+            /*
 
+            _at
+            Returns the element at the specified position
+
+            The algorithm is as follows:
+                * Divide the index (pos) by the capacity of the block
+                * This will indicate the block number we need
+                * The remainder of that division will be its index within that block
+                * Iterate through blocks until we find the proper one
+                * Index the array in the block
+            
+            The function will then return a reference. For const objects, this will be a
+            const_reference.
+
+            */
+
+            if (pos < _size)
+            {
+                // get the block size and index number
+                auto block_number = pos / list_block<value_type>::block_size();
+                auto index_number = pos % list_block<value_type>::block_size();
+                list_block<T>* containing_node = nullptr;   // the list_block containing the array we want to index
+
+                /*
+
+                Get the proper node
+
+                We can optimize if it's close to the head or tail of the list
+                We will also iterate from the front if it's toward the front, or the back if it's toward the back 
+
+                */
+
+                if (block_number == 0)
+                {
+                    containing_node = _head;
+                }
+                else if (block_number == _num_blocks - 1)
+                {
+                    containing_node = _tail;
+                }
+                else if (block_number <= _num_blocks / 2)
+                {
+                    // iterate through the linked list until we get to the proper block            
+                    auto current_node = _head;
+                    for (size_t i = 0; i < block_number; i++)
+                    {
+                        if (current_node)
+                        {
+                            current_node = current_node->_next;
+                        }
+                        else
+                        {
+                            throw std::out_of_range("segmented_list");
+                        }
+                    }
+                    containing_node = current_node;
+                }
+                else
+                {
+                    // iterate backwards
+                    auto current_node = _tail;
+                    size_t num_times = _num_blocks - block_number - 1;
+                    for (size_t i = 0; i < num_times; i++)
+                    {
+                        if (current_node)
+                        {
+                            current_node = current_node->_previous;
+                        }
+                        else
+                        {
+                            throw std::out_of_range("segmented_list");
+                        }
+                    }
+                    containing_node = current_node;
+                }
+
+                // now, index the block's array to get the element
+                if (index_number < containing_node->_size)
+                {
+                    return containing_node->_arr[index_number];
+                }
+                else
+                {
+                    throw std::out_of_range("segmented_list");
+                }
+            }
+            else
+            {
+                throw std::out_of_range("segmented_list");
+            }
+        }
+    
+    public:
         size_t size() const noexcept
         {
             return _size;
@@ -678,103 +777,29 @@ namespace segmented_list
         }
         
         [[nodiscard]]
-        reference at(size_type n) const
+        constexpr reference at(size_type pos)
         {
-            /*
-
-            at
-            Returns the element at the specified position
-
-            The algorithm is as follows:
-                * Divide the index (n) by the capacity of the block
-                * This will indicate the block number we need
-                * The remainder of that division will be its index within that block
-                * Iterate through blocks until we find the proper one
-                * Index the array in the block
-
-            */
-
-            if (n < _size)
-            {
-                // get the block size and index number
-                auto block_number = n / list_block<value_type>::block_size();
-                auto index_number = n % list_block<value_type>::block_size();
-                list_block<T>* containing_node = nullptr;   // the list_block containing the array we want to index
-
-                /*
-
-                Get the proper node
-
-                We can optimize if it's close to the head or tail of the list
-                We will also iterate from the front if it's toward the front, or the back if it's toward the back 
-
-                */
-
-                if (block_number == 0)
-                {
-                    containing_node = _head;
-                }
-                else if (block_number == _num_blocks - 1)
-                {
-                    containing_node = _tail;
-                }
-                else if (block_number <= _num_blocks / 2)
-                {
-                    // iterate through the linked list until we get to the proper block            
-                    auto current_node = _head;
-                    for (size_t i = 0; i < block_number; i++)
-                    {
-                        if (current_node)
-                        {
-                            current_node = current_node->_next;
-                        }
-                        else
-                        {
-                            throw std::out_of_range("segmented_list");
-                        }
-                    }
-                    containing_node = current_node;
-                }
-                else
-                {
-                    // iterate backwards
-                    auto current_node = _tail;
-                    size_t num_times = _num_blocks - block_number - 1;
-                    for (size_t i = 0; i < num_times; i++)
-                    {
-                        if (current_node)
-                        {
-                            current_node = current_node->_previous;
-                        }
-                        else
-                        {
-                            throw std::out_of_range("segmented_list");
-                        }
-                    }
-                    containing_node = current_node;
-                }
-
-                // now, index the block's array to get the element
-                if (index_number < containing_node->_size)
-                {
-                    return containing_node->_arr[index_number];
-                }
-                else
-                {
-                    throw std::out_of_range("segmented_list");
-                }
-            }
-            else
-            {
-                throw std::out_of_range("segmented_list");
-            } 
+            return this->_at(pos);
         }
 
         [[nodiscard]]
-        reference operator[](size_t n) const
+        constexpr const_reference at(size_type pos) const
+        {
+            return this->_at(pos);
+        }
+
+        [[nodiscard]]
+        constexpr reference operator[](size_type pos)
         {
             // an alias for 'at'
-            return this->at(n);
+            return this->_at(pos);
+        }
+
+        [[nodiscard]]
+        constexpr const_reference operator[](size_type pos) const
+        {
+            // also an alias for 'at'
+            return this->_at(pos);
         }
 
         void push_back(const T& val)
