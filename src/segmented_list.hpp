@@ -278,7 +278,7 @@ public:
             {
                 if (_elem_index == 0)
                 {
-                    if (_block_pointer->previous)
+                    if (_block_pointer->_previous)
                     {
                         _elem_index = _block<value_type>::block_size() - 1;
                         _block_pointer = _block_pointer->_previous;
@@ -427,8 +427,8 @@ public:
     // define our iterators
     using iterator = list_iterator<false>;
     using const_iterator = list_iterator<true>;
-    using reverse_iterator = std::reverse_iterator<iterator>;
-    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+    using reverse_iterator = std::reverse_iterator<list_iterator<false>>;
+    using const_reverse_iterator = std::reverse_iterator<list_iterator<true>>;
 
     reference front()
     {
@@ -515,12 +515,24 @@ public:
 
     reverse_iterator rend()
     {
-        return reverse_iterator(_head, 0, iter_state::before_begin);
+        return reverse_iterator(
+            iterator(
+                _head, 
+                0, 
+                iter_state::before_begin
+            )
+        );
     }
 
     const_reverse_iterator crend()
     {
-        return const_reverse_iterator(_head, 0, iter_state::before_begin);
+        return const_reverse_iterator(
+            const_iterator(
+                _head, 
+                0,
+                iter_state::before_begin
+            )
+        );
     }
     
     [[nodiscard]]
