@@ -13,9 +13,137 @@ Copyright 2020 Riley Lannon
 #include <iterator>
 #include <initializer_list>
 
-#include "block.hpp"
 
-template<typename T, typename Allocator = std::allocator<_block<T> > >
+template <typename T, size_t N = 21>
+class list_block
+{
+    /*
+
+    list_block
+    Template parameters:
+        * T -   The contained type
+        * N -   The size of the block (can be configured)
+
+    */
+
+    template <typename, typename > friend class segmented_list;
+
+    std::array<T, N> _arr;
+
+    list_block* _previous;
+    list_block* _next;
+
+    const size_t _capacity;
+    size_t _size;
+
+    list_block(list_block<T, N>* prev, list_block<T, N>* next)
+        : _previous(prev)
+        , _next(next)
+        , _capacity(N)
+        , _size(0) { }
+public:
+    using value_type = T;
+    using reference = value_type & ;
+    using pointer = value_type * ;
+    using const_reference = const T & ;
+    using const_pointer = const T * ;
+    using size_type = size_t;
+
+    static const size_type block_size()
+    {
+        return N;
+    }
+
+    constexpr size_type capacity() const
+    {
+        return _capacity;
+    }
+
+    size_type size() const
+    {
+        return _size;
+    }
+
+    bool empty() const
+    {
+        return _size == 0;
+    }
+
+    void push_back(const T& val)
+    {
+        /*
+
+        push_back
+        Adds the element 'val' at the next available position
+        If the array is full, throws an out_of_range exception
+
+        */
+
+        if (_size < _capacity)
+        {
+            _arr[_size] = val;
+            _size += 1;
+        }
+        else
+        {
+            throw std::out_of_range("list_block");
+        }   
+    }
+
+    void pop_back()
+    {
+        /*
+
+        pop_back
+        Removes the last element from the array
+
+        */
+
+        if (_size == 0)
+        {
+            throw std::out_of_range("list_block");
+        }
+        else
+        {
+            // do not call the destructor explicitly, as the std::array destructor will do that
+            // this means the element is left in a valid but indeterminate state
+            _size -= 1;
+        }
+    }
+
+    list_block(list_block<T, N>* tail)
+        : _previous(tail)
+        , _next(nullptr)
+        , _capacity(N)
+        , _size(0) { }
+
+    list_block(const list_block<T, N>& other)
+        : _arr(other._arr)
+        , _previous(nullptr)
+        , _next(nullptr)
+        , _capacity(other._capacity)
+        , _size(other._size) { }
+
+    list_block(list_block<T, N>&& other)
+        : _arr(other._arr)
+        , _previous(other._previous)
+        , _next(other._next)
+        , _capacity(other._capacity)
+        , _size(other._size) 
+        { 
+            other._next = nullptr; 
+            other._previous = nullptr;
+        }
+
+    list_block()
+        : _capacity(N)
+        , _size(0)
+        , _previous(nullptr)
+        , _next(nullptr) { }
+};
+
+
+template<typename T, typename Allocator = std::allocator<list_block<T> > >
 class segmented_list
 {
     /*
@@ -24,14 +152,14 @@ class segmented_list
 
     Template parameters:
         * T -   The contained type
-        * Allocator -    The allocator to use; defaults to allocator<_block<T>>
+        * Allocator -    The allocator to use; defaults to allocator<list_block<T>>
 
     */
 
     // like a linked list, track head and tail nodes
-    _block<T>* _head;
-    _block<T>* _tail;
-    _block<T>* _reserved;   // keep one block reserved upon a deallocation
+    list_block<T>* _head;
+    list_block<T>* _tail;
+    list_block<T>* _reserved;   // keep one block reserved upon a deallocation
 
     Allocator _allocator;
 
@@ -81,7 +209,7 @@ class segmented_list
             _tail = allocated;
         }
 
-        _capacity += _block<T>::block_size();
+        _capacity += list_block<T>::block_size();
         _num_blocks++;
     }
 public:
@@ -174,7 +302,7 @@ public:
                 _elem_index++;
 
                 // check to see if we need to move to the next block
-                if (_elem_index == _block<value_type>::block_size())
+                if (_elem_index == list_block<value_type>::block_size())
                 {
                     if (_block_pointer->_next)
                     {
@@ -208,7 +336,7 @@ public:
                 _elem_index++;
 
                 // check to see if we need to move to the next block
-                if (_elem_index == _block<value_type>::block_size())
+                if (_elem_index == list_block<value_type>::block_size())
                 {
                     if (_block_pointer->_next)
                     {
@@ -241,7 +369,7 @@ public:
                 {
                     if (_block_pointer->_previous)
                     {
-                        _elem_index = _block<value_type>::block_size() - 1;
+                        _elem_index = list_block<value_type>::block_size() - 1;
                         _block_pointer = _block_pointer->_previous;
                     }
                     else
@@ -278,7 +406,7 @@ public:
                 {
                     if (_block_pointer->_previous)
                     {
-                        _elem_index = _block<value_type>::block_size() - 1;
+                        _elem_index = list_block<value_type>::block_size() - 1;
                         _block_pointer = _block_pointer->_previous;
                     }
                     else
@@ -398,10 +526,10 @@ public:
         friend class segmented_list;    // ensure the parent class is a friend
         iter_state _state;
 
-        _block<value_type>* _block_pointer;  // pointer to the block we are in
+        list_block<value_type>* _block_pointer;  // pointer to the block we are in
         size_t _elem_index; // index within the block
 
-        list_iterator(_block<value_type>* p, size_t idx, iter_state state)
+        list_iterator(list_block<value_type>* p, size_t idx, iter_state state)
             : _block_pointer(p)
             , _elem_index(idx)
             , _state(state)
@@ -575,9 +703,9 @@ public:
         if (n < _size)
         {
             // get the block size and index number
-            auto block_number = n / _block<value_type>::block_size();
-            auto index_number = n % _block<value_type>::block_size();
-            _block<T>* containing_node = nullptr;   // the _block containing the array we want to index
+            auto block_number = n / list_block<value_type>::block_size();
+            auto index_number = n % list_block<value_type>::block_size();
+            list_block<T>* containing_node = nullptr;   // the list_block containing the array we want to index
 
             /*
 
@@ -721,7 +849,7 @@ public:
 
                 // update the tail node and the capacity
                 _tail = new_tail;
-                _capacity -= _block<T>::block_size();
+                _capacity -= list_block<T>::block_size();
                 _num_blocks--;
             }
         }
