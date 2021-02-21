@@ -94,6 +94,8 @@ public:
     using size_type = size_t;
     using allocator_type = Allocator;
 
+    enum iter_state { iter_valid = 0, before_begin = 1, past_end = 2 };
+
     size_t size() const noexcept
     {
         return _size;
@@ -123,18 +125,20 @@ public:
     class list_iterator
     {
         friend class segmented_list;    // ensure the parent class is a friend
+        iter_state _state;
 
         _block<value_type>* _block_pointer;  // pointer to the block we are in
         size_t _elem_index; // index within the block
 
-        list_iterator(_block<value_type>* p, size_t idx)
+        list_iterator(_block<value_type>* p, size_t idx, iter_state state)
             : _block_pointer(p)
             , _elem_index(idx)
+            , _state(state)
         {
             // private constructor
         }
     public:
-        using value_type = T;
+        //using value_type = T;
         using pointer = 
             typename std::conditional_t<is_const, const value_type *, value_type * >;
         using reference = 
@@ -148,69 +152,69 @@ public:
 
         bool operator==(const list_iterator& right)
         {
-            return _block_pointer == right._block_pointer && _elem_index == right._elem_index;
+            return _block_pointer == right._block_pointer && _elem_index == right._elem_index && _state == right._state;
         }
 
         bool operator!=(const list_iterator& right)
         {
-            return _block_pointer != right._block_pointer || _elem_index != right._elem_index;
+            return _block_pointer != right._block_pointer || _elem_index != right._elem_index || _state != right._state;
         }
 
         list_iterator::reference operator*()
         {
             if (
-                (_block_pointer != nullptr) && 
+                (_state == iter_state::iter_valid) && 
                 (_elem_index < (_block_pointer->capacity()) ) 
             ) {
                 return _block_pointer->_arr[_elem_index];
             }
             else
             {
-                throw std::out_of_range("segmented_list iterator");
+                throw std::out_of_range("segmented_list iterator operator*");
             }
         }
 
         list_iterator::const_reference operator*() const
         {
             if (
-                (_block_pointer != nullptr) && 
+                (_state == iter_state::iter_valid) && 
                 (_elem_index < (_block_pointer->capacity()) ) 
             ) {
                 return _block_pointer->_arr[_elem_index];
             }
             else
             {
-                throw std::out_of_range("segmented_list iterator");
+                throw std::out_of_range("segmented_list iterator operator*");
             }
         }
 
         list_iterator::pointer operator->()
         {
-            if (_block_pointer && (_elem_index < (_block_pointer->capacity()) ) )
+            if (_state == iter_state::iter_valid && (_elem_index < (_block_pointer->capacity()) ) )
             {
                 return &_block_pointer->_arr[_elem_index];
             }
             else
             {
-                throw std::out_of_range("segmented_list iterator");
+                throw std::out_of_range("segmented_list iterator operator->");
             }
         }
 
         list_iterator::const_pointer operator->() const
         {
-            if (_block_pointer && (_elem_index < (_block_pointer->capacity()) ) )
+            if (_state == iter_state::iter_valid && (_elem_index < (_block_pointer->capacity()) ) )
             {
                 return &_block_pointer->_arr[_elem_index];
             }
             else
             {
-                throw std::out_of_range("segmented_list iterator");
+                throw std::out_of_range("segmented_list iterator operator->");
             }
         }
 
         list_iterator& operator++()
         {
-            if (_block_pointer)
+            if (_state == iter_state::iter_valid)
             {
                 _elem_index++;
 
@@ -218,19 +222,20 @@ public:
                 if (_elem_index == _block<value_type>::block_size())
                 {
                     _elem_index = 0;
-                    _block_pointer = _block_pointer->_next;
+                    if (_block_pointer->_next)
+                        _block_pointer = _block_pointer->_next;
+                    else
+                        _state = iter_state::past_end;
                 }
-
-                // check to see if we are now past the end
-                if (_block_pointer && _elem_index >= _block_pointer->_size)
+                else if (_elem_index == _block_pointer->size())
                 {
-                    _block_pointer = nullptr;
                     _elem_index = 0;
+                    _state = iter_state::past_end;
                 }
             }
             else
             {
-                throw std::out_of_range("segmented_list iterator");
+                throw std::out_of_range("segmented_list iterator operator++");
             }
 
             return *this;
@@ -240,7 +245,7 @@ public:
         {
             list_iterator li { *this };
 
-            if (_block_pointer)
+            if (_state == iter_state::iter_valid)
             {
                 _elem_index++;
 
@@ -248,19 +253,20 @@ public:
                 if (_elem_index == _block<value_type>::block_size())
                 {
                     _elem_index = 0;
-                    _block_pointer = _block_pointer->_next;
+                    if (_block_pointer->_next)
+                        _block_pointer = _block_pointer->_next;
+                    else
+                        _state = iter_state::past_end;
                 }
-
-                // check to see if we are now past the end
-                if (_block_pointer && _elem_index >= _block_pointer->_size)
+                else if (_elem_index == _block_pointer->size())
                 {
-                    _block_pointer = nullptr;
                     _elem_index = 0;
+                    _state = iter_state::past_end;
                 }
             }
             else
             {
-                throw std::out_of_range("segmented_list iterator");
+                throw std::out_of_range("segmented_list iterator operator++");
             }
             
             return li;
@@ -268,16 +274,20 @@ public:
 
         list_iterator& operator--()
         {
-            if (_block_pointer)
+            if (_state == iter_state::iter_valid)
             {
                 if (_elem_index == 0)
                 {
-                    _elem_index = _block<value_type>::block_size() - 1;
-                    _block_pointer = _block_pointer->_previous;
-
-                    // if there is no previous block, ensure elem_index is set to 0
-                    if (_block_pointer == nullptr)
+                    if (_block_pointer->previous)
+                    {
+                        _elem_index = _block<value_type>::block_size() - 1;
+                        _block_pointer = _block_pointer->_previous;
+                    }
+                    else
+                    {
                         _elem_index = 0;
+                        _state = iter_state::before_begin;
+                    }
                 }
                 else
                 {
@@ -286,8 +296,7 @@ public:
             }
             else
             {
-                // this points to the past-the-end element
-                // todo: determine how to handle the past-the-end element (and before-the-beginning)
+                throw std::out_of_range("segmented_list iterator operator--");
             }
             
             return *this;
@@ -297,16 +306,20 @@ public:
         {
             list_iterator li { *this };
 
-            if (_block_pointer)
+            if (_state == iter_state::iter_valid)
             {
                 if (_elem_index == 0)
                 {
-                    _elem_index = _block<value_type>::block_size() - 1;
-                    _block_pointer = _block_pointer->_previous;
-
-                    // if there is no previous block, ensure elem_index is set to 0
-                    if (_block_pointer == nullptr)
+                    if (_block_pointer->_previous)
+                    {
+                        _elem_index = _block<value_type>::block_size() - 1;
+                        _block_pointer = _block_pointer->_previous;
+                    }
+                    else
+                    {
                         _elem_index = 0;
+                        _state = iter_state::before_begin;
+                    }
                 }
                 else
                 {
@@ -315,8 +328,7 @@ public:
             }
             else
             {
-                // this points to the past-the-end element
-                // todo: determine how to handle these cases
+                throw std::out_of_range("segmented_list iterator operator--");
             }
 
             return li;
@@ -329,6 +341,7 @@ public:
             // converting copy assignment operator
             _block_pointer = it._block_pointer;
             _elem_index = it._elem_index;
+            _state = it._state;
         }
 
         template<bool _is_const = is_const,
@@ -338,6 +351,7 @@ public:
             // converting move assignment operator
             _block_pointer = it._block_pointer;
             _elem_index = it._elem_index;
+            _state = it._state;
             
             it._block_pointer = nullptr;
             it._elem_index = 0;
@@ -348,6 +362,7 @@ public:
             // default copy assignment operator
             _block_pointer = it._block_pointer;
             _elem_index = it._elem_index;
+            _state = it._state;
         }
 
         list_iterator& operator=(list_iterator&& it)
@@ -355,6 +370,7 @@ public:
             // default move assignment operator
             _block_pointer = it._block_pointer;
             _elem_index = it._elem_index;
+            _state = it._state;
             
             it._block_pointer = nullptr;
             it._elem_index = 0;
@@ -364,11 +380,13 @@ public:
 
         list_iterator() noexcept
             : _block_pointer(nullptr)
-            , _elem_index(0) {}
+            , _elem_index(0)
+            , _state(iter_state::before_begin) {}
 
         list_iterator(const list_iterator& it)
             : _block_pointer(it._block_pointer)
             , _elem_index(it._elem_index)
+            , _state(it._state)
         {
             // default copy constructor
         }
@@ -376,6 +394,7 @@ public:
         list_iterator(list_iterator&& it)
             : _block_pointer(it._block_pointer)
             , _elem_index(it._elem_index)
+            , _state(it._state)
         {
             // default move constructor
             it._block_pointer = nullptr;
@@ -387,6 +406,7 @@ public:
         list_iterator(const list_iterator<false>& it)
             : _block_pointer(it._block_pointer)
             , _elem_index(it._elem_index)
+            , _state(it._state)
         {
             // converting copy constructor
         }
@@ -396,6 +416,7 @@ public:
         list_iterator(list_iterator<false>&& it)
             : _block_pointer(it._block_pointer)
             , _elem_index(it._elem_index)
+            , _state(it._state)
         {
             // converting move constructor
             it._block_pointer = nullptr;
@@ -437,13 +458,13 @@ public:
     {
         if (_size == 0)
         {
-            // todo: how to handle before-the-beginning element?
-            return iterator(nullptr, 0);
+            // return an iterator to the invalid iterator
+            return iterator(_head, 0, iter_state::before_begin);
         }
         else
         {
             // return an iterator to the first element
-            return iterator(_head, 0);
+            return iterator(_head, 0, iter_state::iter_valid);
         }
         
     }
@@ -452,48 +473,54 @@ public:
     {
         if (_size == 0)
         {
-            // todo: how to handle?
-            return const_iterator(nullptr, 0);
+            return const_iterator(_head, 0, iter_state::before_begin);
         }
         else
         {
-            return const_iterator(_head, 0);
+            return const_iterator(_head, 0, iter_state::iter_valid);
         }
     }
 
     reverse_iterator rbegin()
     {
         return reverse_iterator(
-            iterator(_tail, _tail->size() - 1)
+            iterator(
+                _tail, 
+                _tail->size() - 1,
+                _tail->size() ? iter_state::iter_valid : iter_state::past_end
+            )
         );
     }
 
     const_reverse_iterator crbegin()
     {
         return const_reverse_iterator(
-            iterator(_tail, _tail->size() - 1)
+            iterator(
+                _tail, 
+                _tail->size() - 1,
+                _tail->size() ? iter_state::iter_valid : iter_state::past_end
+            )
         );
     }
 
     iterator end()
     {
-        // todo: how to handle past-the-end?
-        return iterator(nullptr, 0);
+        return iterator(_tail, 0, iter_state::past_end);
     }
 
     const_iterator cend()
     {
-        return const_iterator(nullptr, 0);
+        return const_iterator(_tail, 0, iter_state::past_end);
     }
 
     reverse_iterator rend()
     {
-        return reverse_iterator(nullptr, 0);
+        return reverse_iterator(_head, 0, iter_state::before_begin);
     }
 
     const_reverse_iterator crend()
     {
-        return const_reverse_iterator(nullptr, 0);
+        return const_reverse_iterator(_head, 0, iter_state::before_begin);
     }
     
     [[nodiscard]]
@@ -859,6 +886,8 @@ public:
         // move constructor
         other._head = nullptr;
         other._tail = nullptr;
+        other._before_beginning = nullptr;
+        other._past_end = nullptr;
         other._num_blocks = 0;
         other._size = 0;
         other._capacity = 0;
@@ -879,6 +908,8 @@ public:
 
         other._head = nullptr;
         other._tail = nullptr;
+        other._before_beginning = nullptr;
+        other._past_end = nullptr;
         other._num_blocks = 0;
         other._size = 0;
         other._capacity = 0;
@@ -891,10 +922,7 @@ public:
         , _reserved(nullptr)
         , _size(0)
         , _capacity(0)
-        , _num_blocks(0)
-    {
-        // default constructor
-    }
+        , _num_blocks(0) { }
 
     ~segmented_list()
     {

@@ -33,6 +33,12 @@ class _block
 
     const size_t _capacity;
     size_t _size;
+
+    _block(_block<T, N>* prev, _block<T, N>* next)
+        : _previous(prev)
+        , _next(next)
+        , _capacity(N)
+        , _size(0) { }
 public:
     using value_type = T;
     using reference = value_type & ;
@@ -107,35 +113,29 @@ public:
         : _previous(tail)
         , _next(nullptr)
         , _capacity(N)
-        , _size(0)
-    {
-    }
+        , _size(0) { }
 
     _block(const _block<T, N>& other)
         : _arr(other._arr)
-        , _previous(other._previous)
-        , _next(other._next)
+        , _previous(nullptr)
+        , _next(nullptr)
         , _capacity(other._capacity)
-        , _size(other._size)
-    {
-    }
+        , _size(other._size) { }
 
-    _block(const _block<T, N>&& other)
+    _block(_block<T, N>&& other)
         : _arr(other._arr)
         , _previous(other._previous)
         , _next(other._next)
         , _capacity(other._capacity)
-        , _size(other._size)
-    {
-        other = nullptr;
-    }
+        , _size(other._size) 
+        { 
+            other._next = nullptr; 
+            other._previous = nullptr;
+        }
 
     _block()
         : _capacity(N)
         , _size(0)
         , _previous(nullptr)
-        , _next(nullptr)
-    {
-        // default constructor
-    }
+        , _next(nullptr) { }
 };
