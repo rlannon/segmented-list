@@ -85,66 +85,21 @@ class segmented_list
         _num_blocks++;
     }
 public:
-    // define other class traits
-    using value_type = T;
-    using reference = T & ;
-    using pointer = T * ;
-    using const_reference = const T & ;
-    using const_pointer = const T * ;
-    using size_type = size_t;
-    using allocator_type = Allocator;
-
+    // define our iterator states (valid/invalid)
     enum iter_state { iter_valid = 0, before_begin = 1, past_end = 2 };
 
-    size_t size() const noexcept
-    {
-        return _size;
-    }
-
-    size_t capacity() const noexcept
-    {
-        return _capacity;
-    }
-
-    size_t max_size() const noexcept
-    {
-        return std::allocator_traits<Allocator>::max_size(_allocator);
-    }
-
-    bool empty() const noexcept
-    {
-        return _size == 0;
-    }
-
-    Allocator get_allocator() const noexcept
-    {
-        return _allocator;
-    }
-
+    // define the iterator class
     template <bool is_const = false>
     class list_iterator
     {
-        friend class segmented_list;    // ensure the parent class is a friend
-        iter_state _state;
-
-        _block<value_type>* _block_pointer;  // pointer to the block we are in
-        size_t _elem_index; // index within the block
-
-        list_iterator(_block<value_type>* p, size_t idx, iter_state state)
-            : _block_pointer(p)
-            , _elem_index(idx)
-            , _state(state)
-        {
-            // private constructor
-        }
     public:
-        //using value_type = T;
+        using value_type = T;
         using pointer = 
             typename std::conditional_t<is_const, const value_type *, value_type * >;
         using reference = 
             typename std::conditional_t<is_const, const value_type &, value_type & >;
-        using const_pointer = const T * ;
-        using const_reference = const T & ;
+        using const_pointer = const value_type * ;
+        using const_reference = const value_type & ;
         using iterator_category = std::bidirectional_iterator_tag;
         using difference_type = std::ptrdiff_t;
 
@@ -178,7 +133,7 @@ public:
         {
             if (
                 (_state == iter_state::iter_valid) && 
-                (_elem_index < (_block_pointer->capacity()) ) 
+                (_elem_index < _block_pointer->capacity() ) 
             ) {
                 return _block_pointer->_arr[_elem_index];
             }
@@ -221,15 +176,18 @@ public:
                 // check to see if we need to move to the next block
                 if (_elem_index == _block<value_type>::block_size())
                 {
-                    _elem_index = 0;
                     if (_block_pointer->_next)
+                    {
+                        _elem_index = 0;
                         _block_pointer = _block_pointer->_next;
+                    }
                     else
+                    {
                         _state = iter_state::past_end;
+                    }
                 }
                 else if (_elem_index == _block_pointer->size())
                 {
-                    _elem_index = 0;
                     _state = iter_state::past_end;
                 }
             }
@@ -249,24 +207,27 @@ public:
             {
                 _elem_index++;
 
-                // check to see if we need to move onto the next block
+                // check to see if we need to move to the next block
                 if (_elem_index == _block<value_type>::block_size())
                 {
-                    _elem_index = 0;
                     if (_block_pointer->_next)
+                    {
+                        _elem_index = 0;
                         _block_pointer = _block_pointer->_next;
+                    }
                     else
+                    {
                         _state = iter_state::past_end;
+                    }
                 }
                 else if (_elem_index == _block_pointer->size())
                 {
-                    _elem_index = 0;
                     _state = iter_state::past_end;
                 }
             }
             else
             {
-                throw std::out_of_range("segmented_list iterator operator++");
+                throw std::out_of_range("segmented_list iterator operator++(int)");
             }
             
             return li;
@@ -293,6 +254,11 @@ public:
                 {
                     _elem_index--;
                 }
+            }
+            else if (_state == iter_state::past_end)
+            {
+                _elem_index = _block_pointer->size() - 1;
+                _state = iter_state::iter_valid;
             }
             else
             {
@@ -326,9 +292,14 @@ public:
                     _elem_index--;
                 }
             }
+            else if (_state == iter_state::past_end)
+            {
+                _elem_index = _block_pointer->size() - 1;
+                _state = iter_state::iter_valid;
+            }
             else
             {
-                throw std::out_of_range("segmented_list iterator operator--");
+                throw std::out_of_range("segmented_list iterator operator--(int)");
             }
 
             return li;
@@ -422,13 +393,62 @@ public:
             it._block_pointer = nullptr;
             it._elem_index = 0;
         }
+    
+    private:
+        friend class segmented_list;    // ensure the parent class is a friend
+        iter_state _state;
+
+        _block<value_type>* _block_pointer;  // pointer to the block we are in
+        size_t _elem_index; // index within the block
+
+        list_iterator(_block<value_type>* p, size_t idx, iter_state state)
+            : _block_pointer(p)
+            , _elem_index(idx)
+            , _state(state)
+        {
+            // private constructor
+        }
     };
+
+    // define our class traits
+    using value_type = T;
+    using reference = T & ;
+    using pointer = T * ;
+    using const_reference = const T & ;
+    using const_pointer = const T * ;
+    using size_type = size_t;
+    using allocator_type = Allocator;
+
+    size_t size() const noexcept
+    {
+        return _size;
+    }
+
+    size_t capacity() const noexcept
+    {
+        return _capacity;
+    }
+
+    size_t max_size() const noexcept
+    {
+        return std::allocator_traits<Allocator>::max_size(_allocator);
+    }
+
+    bool empty() const noexcept
+    {
+        return _size == 0;
+    }
+
+    Allocator get_allocator() const noexcept
+    {
+        return _allocator;
+    }
 
     // define our iterators
     using iterator = list_iterator<false>;
     using const_iterator = list_iterator<true>;
-    using reverse_iterator = std::reverse_iterator<list_iterator<false>>;
-    using const_reverse_iterator = std::reverse_iterator<list_iterator<true>>;
+    using reverse_iterator = std::reverse_iterator<iterator>;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
     reference front()
     {
@@ -469,7 +489,7 @@ public:
         
     }
 
-    const_iterator cbegin()
+    const_iterator cbegin() const
     {
         if (_size == 0)
         {
@@ -483,19 +503,19 @@ public:
 
     reverse_iterator rbegin()
     {
-        return reverse_iterator(
-            iterator(
+        return std::reverse_iterator<iterator>(
+            /*iterator(
                 _tail, 
                 _tail->size() - 1,
                 _tail->size() ? iter_state::iter_valid : iter_state::past_end
-            )
+            )*/ end()
         );
     }
 
-    const_reverse_iterator crbegin()
+    const_reverse_iterator crbegin() const
     {
-        return const_reverse_iterator(
-            iterator(
+        return std::reverse_iterator<const_iterator>(
+            const_iterator(
                 _tail, 
                 _tail->size() - 1,
                 _tail->size() ? iter_state::iter_valid : iter_state::past_end
@@ -505,28 +525,28 @@ public:
 
     iterator end()
     {
-        return iterator(_tail, 0, iter_state::past_end);
+        return iterator(_tail, _tail->size(), iter_state::past_end);
     }
 
     const_iterator cend()
     {
-        return const_iterator(_tail, 0, iter_state::past_end);
+        return const_iterator(_tail, _tail->size(), iter_state::past_end);
     }
 
     reverse_iterator rend()
     {
-        return reverse_iterator(
-            iterator(
+        return std::reverse_iterator<iterator>(
+            /*iterator(
                 _head, 
                 0, 
                 iter_state::before_begin
-            )
+            )*/ begin()
         );
     }
 
     const_reverse_iterator crend()
     {
-        return const_reverse_iterator(
+        return std::reverse_iterator<const_iterator>(
             const_iterator(
                 _head, 
                 0,

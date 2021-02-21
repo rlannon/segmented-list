@@ -52,7 +52,7 @@ public:
         return N;
     }
 
-    size_type capacity() const
+    constexpr size_type capacity() const
     {
         return _capacity;
     }
