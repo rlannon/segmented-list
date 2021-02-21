@@ -979,26 +979,45 @@ namespace segmented_list
 
         // constructors
         // todo: follow C++20 standards
-
+    private:
+        explicit segmented_list(
+            list_block<T>* head,
+            list_block<T>* tail,
+            list_block<T>* res,
+            size_type size,
+            size_type capacity,
+            size_type num_blocks,
+            const Allocator& alloc
+        ) noexcept
+            : _head(head)
+            , _tail(tail)
+            , _reserved(res)
+            , _size(size)
+            , _capacity(capacity)
+            , _num_blocks(num_blocks)
+            , _allocator(alloc) { }
+    public:
         explicit segmented_list(const Allocator& alloc) noexcept
-            : _allocator(alloc) { }
+            : segmented_list(nullptr, nullptr, nullptr, 0, 0, 0, alloc) { }
 
-        segmented_list(size_t count, const T& value, const Allocator& alloc = Allocator())
-            : _allocator(alloc)
+        segmented_list(size_type count, const T& value, const Allocator& alloc = Allocator())
+            : segmented_list(alloc)
         {
             // initialize with 'count' elements all equal to 'value'
-            // fill the space with values; the container will automatically be resized when needed
-            for (size_t i = 0; i < count; i++)
+            for (size_type i = 0; i < count; i++)
             {
                 this->push_back(value);
             }
         }
 
-        explicit segmented_list(size_t count, const Allocator& alloc = Allocator())
-            : _allocator(alloc)
+        explicit segmented_list(size_type count, const Allocator& alloc = Allocator())
+            : segmented_list(alloc)
         {
             // initial size of 'count' with default-inserted T
-            // todo: properly construct
+            for (size_type i = 0; i < count; i++)
+            {
+                this->push_back( value_type{ } );
+            }
         }
 
         segmented_list(const std::initializer_list<T>& il)
@@ -1021,6 +1040,7 @@ namespace segmented_list
         segmented_list(segmented_list&& other) noexcept
             : _head(other._head)
             , _tail(other._tail)
+            , _reserved(other._reserved)
             , _num_blocks(other._num_blocks)
             , _size(other._size)
             , _capacity(other._capacity)
@@ -1029,8 +1049,7 @@ namespace segmented_list
             // move constructor
             other._head = nullptr;
             other._tail = nullptr;
-            other._before_beginning = nullptr;
-            other._past_end = nullptr;
+            other._reserved = nullptr;
             other._num_blocks = 0;
             other._size = 0;
             other._capacity = 0;
@@ -1051,8 +1070,6 @@ namespace segmented_list
 
             other._head = nullptr;
             other._tail = nullptr;
-            other._before_beginning = nullptr;
-            other._past_end = nullptr;
             other._num_blocks = 0;
             other._size = 0;
             other._capacity = 0;
